@@ -1,0 +1,1101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Interval Timer</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ── Light theme (default) ─────────────────────────── */
+    :root {
+      --bg:            #ffffff;
+      --surface:       #f4f4f6;
+      --surface2:      #e9e9ed;
+      --surface3:      #dedee3;
+      --border:        #d0d0d8;
+      --text:          #18181b;
+      --muted:         #71717a;
+      --blue:          #2563eb;
+      --blue-dim:      rgba(37,99,235,.1);
+      --green:         #059669;
+      --neutral:       #6b7280;
+      --danger:        #dc2626;
+      --overlay-bg:    rgba(255,255,255,.95);
+      --sidebar-w:     256px;
+      --topbar-h:      52px;
+    }
+
+    /* ── Dark theme ─────────────────────────────────────── */
+    [data-theme="dark"] {
+      --bg:            #0d0f18;
+      --surface:       #13161f;
+      --surface2:      #1c1f2e;
+      --surface3:      #252840;
+      --border:        #2a2d45;
+      --text:          #e2e4f0;
+      --muted:         #5b6080;
+      --blue:          #4f8ef7;
+      --blue-dim:      rgba(79,142,247,.12);
+      --green:         #34d399;
+      --neutral:       #8b92b8;
+      --danger:        #f47070;
+      --overlay-bg:    rgba(13,15,24,.94);
+    }
+
+    /* ── Base ───────────────────────────────────────────── */
+    html {
+      height: 100%;
+      height: -webkit-fill-available; /* iOS Safari fix */
+    }
+    body {
+      height: 100%;
+      min-height: -webkit-fill-available;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    .hidden { display: none !important; }
+
+    /* ── Sidebar ────────────────────────────────────────── */
+    #sidebar {
+      width: var(--sidebar-w);
+      min-width: var(--sidebar-w);
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      flex-shrink: 0;
+      z-index: 200;
+    }
+
+    #sidebar-top {
+      padding: 20px 14px 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    #sidebar-top-row {
+      display: flex;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    #sidebar-top-row h2 {
+      flex: 1;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    #preset-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+    }
+
+    .preset-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 10px 10px;
+      border-radius: 7px;
+      cursor: pointer;
+      margin-bottom: 2px;
+      transition: background .1s;
+      -webkit-user-select: none;
+      user-select: none;
+      touch-action: manipulation;
+    }
+    .preset-item:active  { background: var(--surface2); }
+    .preset-item.active  { background: var(--surface3); }
+    .preset-name {
+      flex: 1;
+      font-size: 13.5px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .preset-actions {
+      display: flex;
+      gap: 2px;
+    }
+
+    /* ── Backdrop (mobile) ──────────────────────────────── */
+    #backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.45);
+      z-index: 199;
+      opacity: 0;
+      transition: opacity .25s;
+      pointer-events: none;
+    }
+    #backdrop.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    /* ── Shared button styles ───────────────────────────── */
+    .icon-btn {
+      width: 28px; height: 28px;
+      background: none; border: none;
+      color: var(--muted);
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      flex-shrink: 0;
+      touch-action: manipulation;
+    }
+    .icon-btn:active { background: var(--surface2); }
+    .icon-btn.danger:active { background: rgba(220,38,38,.15); color: var(--danger); }
+
+    #btn-theme {
+      width: 30px; height: 30px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      cursor: pointer;
+      color: var(--muted);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      touch-action: manipulation;
+    }
+    #btn-theme svg { pointer-events: none; }
+
+    #btn-new {
+      width: 100%;
+      padding: 9px;
+      background: var(--blue);
+      color: #fff;
+      border: none;
+      border-radius: 7px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: .02em;
+      touch-action: manipulation;
+    }
+
+    /* ── Topbar (mobile only, hidden on desktop) ────────── */
+    #topbar {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: var(--topbar-h);
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      align-items: center;
+      padding: 0 10px 0 6px;
+      gap: 6px;
+      z-index: 100;
+    }
+    #topbar-name {
+      flex: 1;
+      font-size: 15px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: var(--text);
+      padding: 0 4px;
+    }
+    #btn-theme-mobile {
+      width: 34px; height: 34px;
+      background: none;
+      border: none;
+      border-radius: 7px;
+      cursor: pointer;
+      color: var(--muted);
+      display: flex; align-items: center; justify-content: center;
+      touch-action: manipulation;
+    }
+    #btn-theme-mobile svg { pointer-events: none; }
+
+    /* ── Main ───────────────────────────────────────────── */
+    #main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      position: relative;
+      min-width: 0;
+    }
+
+    .view { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+    /* ── Empty state ────────────────────────────────────── */
+    #empty {
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      color: var(--muted);
+      padding: 24px;
+    }
+    #empty svg { opacity: .2; }
+    #empty p { font-size: 14px; text-align: center; }
+
+    /* ── Editor ─────────────────────────────────────────── */
+    #editor-head { padding: 28px 32px 0; }
+    #preset-name-input {
+      width: 100%;
+      font-size: 22px;
+      font-weight: 700;
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: var(--text);
+      outline: none;
+      padding-bottom: 6px;
+      transition: border-color .2s;
+    }
+    #preset-name-input:focus { border-bottom-color: var(--blue); }
+    #preset-name-input::placeholder { color: var(--muted); }
+
+    #editor-body {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 20px 32px 0;
+    }
+    .tbl-scroll { overflow-x: auto; }
+    .tbl {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 400px;
+    }
+    .tbl th {
+      text-align: left;
+      font-size: 10.5px;
+      font-weight: 600;
+      letter-spacing: .09em;
+      text-transform: uppercase;
+      color: var(--muted);
+      padding: 0 8px 10px;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    .tbl th:first-child { width: 30px; padding-left: 2px; }
+    .tbl th:nth-child(3), .tbl th:nth-child(4) { width: 60px; }
+    .tbl th:nth-child(5) { width: 108px; }
+    .tbl th:last-child { width: 36px; }
+
+    .irow { border-bottom: 1px solid var(--border); }
+    .irow td { padding: 7px 8px; vertical-align: middle; }
+    .irow td:first-child { padding-left: 2px; }
+    .irow td:last-child { padding-right: 0; }
+    .irow.dragging  { opacity: .3; }
+    .irow.drag-over { background: var(--blue-dim); outline: 2px solid var(--blue); outline-offset: -2px; }
+
+    .drag-handle {
+      cursor: grab;
+      color: var(--muted);
+      font-size: 15px;
+      padding: 4px 2px;
+      user-select: none;
+      display: block;
+      text-align: center;
+    }
+    .drag-handle:active { cursor: grabbing; }
+
+    .ti {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      color: var(--text);
+      padding: 6px 8px;
+      font-size: 13.5px;
+      outline: none;
+      transition: border-color .15s;
+    }
+    .ti:focus { border-color: var(--blue); }
+    input[type="number"].ti {
+      width: 56px;
+      text-align: center;
+      -moz-appearance: textfield;
+    }
+    input[type="number"].ti::-webkit-inner-spin-button,
+    input[type="number"].ti::-webkit-outer-spin-button { -webkit-appearance: none; }
+
+    select.ti {
+      cursor: pointer;
+      -webkit-appearance: none;
+      appearance: none;
+      padding-right: 26px;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2371717a'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 9px center;
+    }
+    [data-theme="dark"] select.ti {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%235b6080'/%3E%3C/svg%3E");
+    }
+
+    /* Editor footer */
+    #editor-foot {
+      padding: 14px 32px 20px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    #btn-add-interval {
+      background: none;
+      border: 1px dashed var(--border);
+      color: var(--muted);
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13.5px;
+      touch-action: manipulation;
+      transition: border-color .15s, color .15s;
+    }
+    #btn-add-interval:active { border-color: var(--blue); color: var(--blue); }
+    .loops-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 13.5px;
+      margin-left: auto;
+    }
+    #loops-input {
+      width: 54px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      color: var(--text);
+      padding: 6px 8px;
+      font-size: 13.5px;
+      text-align: center;
+      outline: none;
+      -moz-appearance: textfield;
+    }
+    #loops-input::-webkit-inner-spin-button,
+    #loops-input::-webkit-outer-spin-button { -webkit-appearance: none; }
+    #loops-input:focus { border-color: var(--blue); }
+    #btn-start {
+      padding: 10px 28px;
+      background: var(--blue);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      touch-action: manipulation;
+    }
+
+    /* ── Player ─────────────────────────────────────────── */
+    #player {
+      align-items: center;
+      justify-content: center;
+      gap: 0;
+      position: relative;
+      padding: 20px 24px;
+    }
+    #pl-name {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--muted);
+      margin-bottom: 12px;
+      text-align: center;
+      transition: color .3s;
+    }
+    #pl-name.exercise { color: var(--blue); }
+    #pl-name.rest     { color: var(--green); }
+
+    #pl-countdown {
+      font-size: 100px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+      letter-spacing: -3px;
+      line-height: 1;
+      margin-bottom: 24px;
+      text-align: center;
+      color: var(--text);
+      transition: color .3s;
+    }
+    #pl-countdown.exercise { color: var(--blue); }
+    #pl-countdown.rest     { color: var(--green); }
+
+    .prog-wrap {
+      width: 100%;
+      max-width: 480px;
+      height: 6px;
+      background: var(--surface3);
+      border-radius: 3px;
+      margin-bottom: 16px;
+      overflow: hidden;
+    }
+    #prog-fill {
+      height: 100%;
+      border-radius: 3px;
+      background: var(--neutral);
+      transition: width .4s linear, background .3s;
+    }
+    #prog-fill.exercise { background: var(--blue); }
+    #prog-fill.rest     { background: var(--green); }
+
+    #pl-status {
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 36px;
+      text-align: center;
+    }
+    #pl-controls {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .pl-btn {
+      padding: 13px 22px;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      touch-action: manipulation;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+    #btn-playpause { background: var(--blue); color: #fff; min-width: 130px; }
+    #btn-playpause.paused { background: var(--green); }
+    #btn-reset, #btn-skip {
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    /* Completion */
+    #completion {
+      position: absolute;
+      inset: 0;
+      background: var(--overlay-bg);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      z-index: 10;
+      padding: 24px;
+    }
+    #completion h2 { font-size: 32px; font-weight: 700; color: var(--green); text-align: center; }
+    #completion p  { font-size: 15px; color: var(--muted); text-align: center; }
+    #btn-done {
+      margin-top: 10px;
+      padding: 13px 36px;
+      background: var(--blue);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      touch-action: manipulation;
+    }
+
+    /* ── Mobile layout (≤ 640px) ────────────────────────── */
+    @media (max-width: 640px) {
+      body { flex-direction: column; }
+
+      /* Show topbar */
+      #topbar { display: flex; }
+
+      /* Sidebar becomes a slide-over drawer */
+      #sidebar {
+        position: fixed;
+        top: 0; left: 0; bottom: 0;
+        width: 82vw;
+        max-width: 300px;
+        min-width: unset;
+        transform: translateX(-110%);
+        transition: transform .28s cubic-bezier(.4,0,.2,1);
+        box-shadow: none;
+      }
+      #sidebar.open {
+        transform: translateX(0);
+        box-shadow: 8px 0 32px rgba(0,0,0,.18);
+      }
+      #backdrop { display: block; }
+
+      /* Push main content below topbar */
+      #main { padding-top: var(--topbar-h); }
+
+      /* Always show preset action buttons (no hover on touch) */
+      .preset-actions { opacity: 1; }
+
+      /* Editor */
+      #editor-head { padding: 18px 16px 0; }
+      #preset-name-input { font-size: 19px; }
+      #editor-body { padding: 14px 0 0; overflow-x: hidden; }
+      .tbl-scroll { overflow-x: auto; padding: 0 16px; -webkit-overflow-scrolling: touch; }
+      #editor-foot { padding: 12px 16px 16px; gap: 10px; }
+      #btn-add-interval { padding: 9px 14px; }
+      .loops-wrap { margin-left: 0; }
+      #btn-start { padding: 10px 20px; }
+
+      /* Player */
+      #player { padding: 16px; justify-content: center; }
+      #pl-name { font-size: 16px; margin-bottom: 8px; }
+      #pl-countdown { font-size: 72px; letter-spacing: -2px; margin-bottom: 18px; }
+      #pl-status { margin-bottom: 24px; }
+      .pl-btn { padding: 14px 16px; font-size: 14px; flex: 1; text-align: center; }
+      #btn-playpause { min-width: auto; }
+      #pl-controls { width: 100%; max-width: 400px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Backdrop (closes mobile sidebar) -->
+<div id="backdrop"></div>
+
+<!-- ═══ Sidebar ═══════════════════════════════════════════ -->
+<aside id="sidebar">
+  <div id="sidebar-top">
+    <div id="sidebar-top-row">
+      <h2>Presets</h2>
+      <button id="btn-theme" title="Toggle theme">
+        <svg id="th-sun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="4"/>
+          <line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+          <line x1="2" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="22" y2="12"/>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+        </svg>
+        <svg id="th-moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="hidden">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+        </svg>
+      </button>
+    </div>
+    <button id="btn-new">+ New Preset</button>
+  </div>
+  <div id="preset-list"></div>
+</aside>
+
+<!-- ═══ Topbar (mobile only) ══════════════════════════════ -->
+<header id="topbar">
+  <button class="icon-btn" id="btn-menu" aria-label="Open presets menu">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+      <line x1="3" y1="6" x2="21" y2="6"/>
+      <line x1="3" y1="12" x2="21" y2="12"/>
+      <line x1="3" y1="18" x2="21" y2="18"/>
+    </svg>
+  </button>
+  <span id="topbar-name">—</span>
+  <button id="btn-theme-mobile" aria-label="Toggle theme">
+    <svg id="th-sun-m" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="4"/>
+      <line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+      <line x1="2" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="22" y2="12"/>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+    </svg>
+    <svg id="th-moon-m" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="hidden">
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+    </svg>
+  </button>
+</header>
+
+<!-- ═══ Main ══════════════════════════════════════════════ -->
+<main id="main">
+
+  <!-- Empty state -->
+  <div id="empty" class="view hidden">
+    <svg width="56" height="56" viewBox="0 0 58 58" fill="none">
+      <rect x="5" y="5" width="48" height="48" rx="9" stroke="currentColor" stroke-width="2"/>
+      <path d="M16 20h26M16 29h26M16 38h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </svg>
+    <p>Select or create a preset to get started</p>
+  </div>
+
+  <!-- Editor -->
+  <div id="editor" class="view hidden">
+    <div id="editor-head">
+      <input id="preset-name-input" type="text" placeholder="Preset name…" autocomplete="off" spellcheck="false">
+    </div>
+    <div id="editor-body">
+      <div class="tbl-scroll">
+        <table class="tbl">
+          <thead>
+            <tr>
+              <th></th>
+              <th>Interval name</th>
+              <th>Min</th>
+              <th>Sec</th>
+              <th>Type</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="intervals-body"></tbody>
+        </table>
+      </div>
+    </div>
+    <div id="editor-foot">
+      <button id="btn-add-interval">+ Add interval</button>
+      <div class="loops-wrap">
+        <label for="loops-input">Loops</label>
+        <input id="loops-input" type="number" min="1" max="99" value="1">
+      </div>
+      <button id="btn-start">&#9654; Start</button>
+    </div>
+  </div>
+
+  <!-- Player -->
+  <div id="player" class="view hidden">
+    <div id="pl-name">Warm-up</div>
+    <div id="pl-countdown">00:00</div>
+    <div class="prog-wrap"><div id="prog-fill"></div></div>
+    <div id="pl-status">Interval 1 of 1 &middot; Round 1 of 1</div>
+    <div id="pl-controls">
+      <button class="pl-btn" id="btn-playpause">&#9646;&#9646; Pause</button>
+      <button class="pl-btn" id="btn-reset">&#8635; Reset</button>
+      <button class="pl-btn" id="btn-skip">Skip &#8594;</button>
+    </div>
+    <div id="completion" class="hidden">
+      <h2>Workout complete!</h2>
+      <p id="completion-sub"></p>
+      <button id="btn-done">Done</button>
+    </div>
+  </div>
+
+</main>
+
+<script>
+'use strict';
+
+function $(id) { return document.getElementById(id); }
+
+// ════════════════════════════════════════════════════════
+//  Theme
+// ════════════════════════════════════════════════════════
+const THEME_KEY = 'interval-timer-theme';
+
+function applyTheme(dark) {
+  document.documentElement.dataset.theme = dark ? 'dark' : '';
+  $('th-sun').classList.toggle('hidden', !dark);
+  $('th-moon').classList.toggle('hidden', dark);
+  $('th-sun-m').classList.toggle('hidden', !dark);
+  $('th-moon-m').classList.toggle('hidden', dark);
+}
+function initTheme() { applyTheme(localStorage.getItem(THEME_KEY) === 'dark'); }
+function toggleTheme() {
+  const dark = document.documentElement.dataset.theme === 'dark';
+  localStorage.setItem(THEME_KEY, dark ? 'light' : 'dark');
+  applyTheme(!dark);
+}
+
+// ════════════════════════════════════════════════════════
+//  Mobile sidebar
+// ════════════════════════════════════════════════════════
+function openSidebar()  {
+  $('sidebar').classList.add('open');
+  $('backdrop').classList.add('open');
+}
+function closeSidebar() {
+  $('sidebar').classList.remove('open');
+  $('backdrop').classList.remove('open');
+}
+
+// ════════════════════════════════════════════════════════
+//  Helpers
+// ════════════════════════════════════════════════════════
+const LS_KEY = 'interval-timer-presets';
+let presets = [], selectedId = null, saveTmr = null;
+
+function uid() {
+  return (typeof crypto !== 'undefined' && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+function pad2(n) { return String(Math.max(0, Math.floor(n))).padStart(2, '0'); }
+function fmtTime(sec) {
+  const s = Math.ceil(Math.max(0, sec));
+  return pad2(Math.floor(s / 60)) + ':' + pad2(s % 60);
+}
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ════════════════════════════════════════════════════════
+//  Storage
+// ════════════════════════════════════════════════════════
+function defaultPreset() {
+  return {
+    id: uid(), name: 'Morning Workout', loops: 2,
+    intervals: [
+      { id: uid(), name: 'Warm-up',  durationSeconds: 120, type: 'rest'     },
+      { id: uid(), name: 'Exercise', durationSeconds: 180, type: 'exercise' },
+      { id: uid(), name: 'Rest',     durationSeconds:  30, type: 'rest'     }
+    ]
+  };
+}
+function loadData() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (raw) { presets = JSON.parse(raw); return; }
+  } catch (_) {}
+  presets = [defaultPreset()];
+  saveData();
+}
+function saveData() { localStorage.setItem(LS_KEY, JSON.stringify(presets)); }
+function debounceSave() { clearTimeout(saveTmr); saveTmr = setTimeout(saveData, 500); }
+function selected() { return presets.find(p => p.id === selectedId) || null; }
+
+// ════════════════════════════════════════════════════════
+//  View switching
+// ════════════════════════════════════════════════════════
+function showView(id) {
+  ['empty','editor','player'].forEach(v => $(v).classList.toggle('hidden', v !== id));
+}
+
+// ════════════════════════════════════════════════════════
+//  Sidebar render
+// ════════════════════════════════════════════════════════
+function renderSidebar() {
+  const list = $('preset-list');
+  list.innerHTML = '';
+  presets.forEach(p => {
+    const div = document.createElement('div');
+    div.className = 'preset-item' + (p.id === selectedId ? ' active' : '');
+    div.innerHTML =
+      `<span class="preset-name">${esc(p.name) || 'Untitled'}</span>` +
+      `<div class="preset-actions">` +
+        `<button class="icon-btn" data-action="dup" data-id="${p.id}" title="Duplicate">&#10697;</button>` +
+        `<button class="icon-btn danger" data-action="del" data-id="${p.id}" title="Delete">&#10005;</button>` +
+      `</div>`;
+    div.addEventListener('click', e => {
+      if (!e.target.closest('[data-action]')) { pickPreset(p.id); closeSidebar(); }
+    });
+    list.appendChild(div);
+  });
+  list.querySelectorAll('[data-action]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const { action, id } = btn.dataset;
+      if (action === 'dup') dupPreset(id);
+      else if (action === 'del') delPreset(id);
+    });
+  });
+}
+
+function setTopbarName() {
+  const p = selected();
+  $('topbar-name').textContent = p ? (p.name || 'Untitled') : '—';
+}
+
+// ════════════════════════════════════════════════════════
+//  Preset CRUD
+// ════════════════════════════════════════════════════════
+function pickPreset(id) {
+  if (timer.active) resetTimer();
+  selectedId = id;
+  renderSidebar();
+  renderEditor();
+  showView('editor');
+  setTopbarName();
+}
+
+function newPreset() {
+  const p = {
+    id: uid(), name: 'New Preset', loops: 1,
+    intervals: [{ id: uid(), name: 'Interval 1', durationSeconds: 60, type: 'exercise' }]
+  };
+  presets.push(p);
+  saveData();
+  renderSidebar();
+  pickPreset(p.id);
+  closeSidebar();
+}
+
+function dupPreset(id) {
+  const src = presets.find(p => p.id === id);
+  if (!src) return;
+  const copy = JSON.parse(JSON.stringify(src));
+  copy.id = uid();
+  copy.name = src.name + ' (copy)';
+  copy.intervals = copy.intervals.map(iv => ({ ...iv, id: uid() }));
+  presets.push(copy);
+  saveData();
+  renderSidebar();
+  pickPreset(copy.id);
+  closeSidebar();
+}
+
+function delPreset(id) {
+  if (!confirm('Delete this preset?')) return;
+  presets = presets.filter(p => p.id !== id);
+  if (selectedId === id) selectedId = presets.length ? presets[0].id : null;
+  saveData();
+  renderSidebar();
+  if (selectedId) { renderEditor(); showView('editor'); }
+  else showView('empty');
+  setTopbarName();
+}
+
+// ════════════════════════════════════════════════════════
+//  Editor
+// ════════════════════════════════════════════════════════
+function renderEditor() {
+  const p = selected();
+  if (!p) { showView('empty'); return; }
+  $('preset-name-input').value = p.name;
+  $('loops-input').value = p.loops;
+  renderRows();
+}
+
+function renderRows() {
+  const p = selected();
+  const tbody = $('intervals-body');
+  tbody.innerHTML = '';
+  if (!p) return;
+
+  p.intervals.forEach((iv, idx) => {
+    const mins = Math.floor(iv.durationSeconds / 60);
+    const secs = iv.durationSeconds % 60;
+    const tr = document.createElement('tr');
+    tr.className = 'irow';
+    tr.draggable = true;
+    tr.dataset.idx = idx;
+    tr.innerHTML =
+      `<td><span class="drag-handle">&#8942;</span></td>` +
+      `<td><input class="ti iv-name" type="text" value="${esc(iv.name)}" placeholder="Name…" data-i="${idx}" autocomplete="off"></td>` +
+      `<td><input class="ti iv-min" type="number" value="${mins}" min="0" max="99" data-i="${idx}"></td>` +
+      `<td><input class="ti iv-sec" type="number" value="${secs}" min="0" max="59" data-i="${idx}"></td>` +
+      `<td><select class="ti iv-type" data-i="${idx}">` +
+        `<option value="exercise"${iv.type==='exercise'?' selected':''}>Exercise</option>` +
+        `<option value="rest"${iv.type==='rest'?' selected':''}>Rest</option>` +
+        `<option value="custom"${iv.type==='custom'?' selected':''}>Custom</option>` +
+      `</select></td>` +
+      `<td><button class="icon-btn danger iv-del" data-i="${idx}">&#10005;</button></td>`;
+
+    tr.addEventListener('dragstart', dragStart);
+    tr.addEventListener('dragover',  dragOver);
+    tr.addEventListener('dragleave', dragLeave);
+    tr.addEventListener('drop',      dragDrop);
+    tr.addEventListener('dragend',   dragEnd);
+    tbody.appendChild(tr);
+  });
+
+  tbody.querySelectorAll('.iv-name').forEach(el => {
+    el.addEventListener('input', e => {
+      selected().intervals[+e.target.dataset.i].name = e.target.value;
+      debounceSave(); setTopbarName(); renderSidebar();
+    });
+  });
+  tbody.querySelectorAll('.iv-min').forEach(el => {
+    el.addEventListener('input', e => {
+      const p2 = selected(), i = +e.target.dataset.i;
+      const m = Math.max(0, Math.min(99, parseInt(e.target.value) || 0));
+      p2.intervals[i].durationSeconds = m * 60 + (p2.intervals[i].durationSeconds % 60);
+      debounceSave();
+    });
+  });
+  tbody.querySelectorAll('.iv-sec').forEach(el => {
+    el.addEventListener('input', e => {
+      const p2 = selected(), i = +e.target.dataset.i;
+      const s = Math.max(0, Math.min(59, parseInt(e.target.value) || 0));
+      p2.intervals[i].durationSeconds = Math.floor(p2.intervals[i].durationSeconds / 60) * 60 + s;
+      debounceSave();
+    });
+  });
+  tbody.querySelectorAll('.iv-type').forEach(el => {
+    el.addEventListener('change', e => {
+      selected().intervals[+e.target.dataset.i].type = e.target.value;
+      debounceSave();
+    });
+  });
+  tbody.querySelectorAll('.iv-del').forEach(el => {
+    el.addEventListener('click', e => {
+      selected().intervals.splice(+e.target.dataset.i, 1);
+      saveData(); renderRows();
+    });
+  });
+}
+
+// ════════════════════════════════════════════════════════
+//  Drag & drop
+// ════════════════════════════════════════════════════════
+let dragIdx = null;
+function dragStart(e) {
+  dragIdx = +this.dataset.idx;
+  this.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', dragIdx);
+}
+function dragOver(e) { e.preventDefault(); this.classList.add('drag-over'); }
+function dragLeave()  { this.classList.remove('drag-over'); }
+function dragDrop(e) {
+  e.stopPropagation();
+  const target = +this.dataset.idx;
+  if (dragIdx !== null && dragIdx !== target) {
+    const ivs = selected().intervals;
+    const [moved] = ivs.splice(dragIdx, 1);
+    ivs.splice(target, 0, moved);
+    saveData(); renderRows();
+  }
+  this.classList.remove('drag-over');
+}
+function dragEnd() {
+  document.querySelectorAll('.irow').forEach(r => r.classList.remove('dragging','drag-over'));
+  dragIdx = null;
+}
+
+// ════════════════════════════════════════════════════════
+//  Timer engine
+// ════════════════════════════════════════════════════════
+const timer = {
+  active:false, paused:false,
+  ivIdx:0, loop:1, totalLoops:1,
+  remaining:0, total:0, lastTs:0, raf:null
+};
+
+function startTimer() {
+  const p = selected();
+  if (!p || !p.intervals.length) return;
+  const first = p.intervals[0];
+  Object.assign(timer, {
+    active:true, paused:false, ivIdx:0, loop:1,
+    totalLoops: Math.max(1, p.loops),
+    remaining: first.durationSeconds,
+    total: first.durationSeconds,
+    lastTs: performance.now()
+  });
+  showView('player');
+  $('completion').classList.add('hidden');
+  updatePlayerUI();
+  timer.raf = requestAnimationFrame(tick);
+}
+
+function tick(now) {
+  if (!timer.active || timer.paused) return;
+  timer.remaining = Math.max(0, timer.remaining - (now - timer.lastTs) / 1000);
+  timer.lastTs = now;
+  updatePlayerUI();
+  if (timer.remaining <= 0) { advance(); return; }
+  timer.raf = requestAnimationFrame(tick);
+}
+
+function advance() {
+  const p = selected();
+  timer.ivIdx++;
+  if (timer.ivIdx >= p.intervals.length) {
+    if (timer.loop < timer.totalLoops) { timer.loop++; timer.ivIdx = 0; }
+    else {
+      timer.active = false;
+      updatePlayerUI();
+      const n = p.intervals.length;
+      $('completion-sub').textContent =
+        `${n} interval${n !== 1 ? 's' : ''} \u00b7 ${timer.totalLoops} round${timer.totalLoops !== 1 ? 's' : ''}`;
+      $('completion').classList.remove('hidden');
+      return;
+    }
+  }
+  const iv = p.intervals[timer.ivIdx];
+  timer.remaining = Math.max(1, iv.durationSeconds);
+  timer.total = timer.remaining;
+  timer.lastTs = performance.now();
+  updatePlayerUI();
+  timer.raf = requestAnimationFrame(tick);
+}
+
+function togglePause() {
+  if (!timer.active) return;
+  timer.paused = !timer.paused;
+  if (!timer.paused) { timer.lastTs = performance.now(); timer.raf = requestAnimationFrame(tick); }
+  updatePlayerUI();
+}
+
+function skipInterval() {
+  if (!timer.active) return;
+  cancelAnimationFrame(timer.raf);
+  timer.remaining = 0;
+  advance();
+}
+
+function resetTimer() {
+  timer.active = false;
+  timer.paused = false;
+  cancelAnimationFrame(timer.raf);
+  showView('editor');
+}
+
+function updatePlayerUI() {
+  const p = selected(); if (!p) return;
+  const iv = p.intervals[timer.ivIdx]; if (!iv) return;
+  const type = iv.type;
+  $('pl-name').textContent = iv.name;
+  $('pl-name').className   = type !== 'custom' ? type : '';
+  $('pl-countdown').textContent = fmtTime(timer.remaining);
+  $('pl-countdown').className   = type !== 'custom' ? type : '';
+  const pct = timer.total > 0 ? Math.min(100, (1 - timer.remaining / timer.total) * 100) : 100;
+  $('prog-fill').style.width = pct + '%';
+  $('prog-fill').className = type;
+  $('pl-status').innerHTML =
+    `Interval ${timer.ivIdx + 1} of ${p.intervals.length} &middot; Round ${timer.loop} of ${timer.totalLoops}`;
+  const pp = $('btn-playpause');
+  pp.innerHTML = timer.paused ? '&#9654; Resume' : '&#9646;&#9646; Pause';
+  pp.classList.toggle('paused', timer.paused);
+}
+
+// ════════════════════════════════════════════════════════
+//  Events
+// ════════════════════════════════════════════════════════
+$('btn-theme').addEventListener('click', toggleTheme);
+$('btn-theme-mobile').addEventListener('click', toggleTheme);
+$('btn-menu').addEventListener('click', openSidebar);
+$('backdrop').addEventListener('click', closeSidebar);
+$('btn-new').addEventListener('click', newPreset);
+
+$('preset-name-input').addEventListener('input', e => {
+  const p = selected(); if (!p) return;
+  p.name = e.target.value;
+  debounceSave(); renderSidebar(); setTopbarName();
+});
+$('loops-input').addEventListener('input', e => {
+  const p = selected(); if (!p) return;
+  p.loops = Math.max(1, Math.min(99, parseInt(e.target.value) || 1));
+  debounceSave();
+});
+$('btn-add-interval').addEventListener('click', () => {
+  const p = selected(); if (!p) return;
+  p.intervals.push({ id: uid(), name: 'New interval', durationSeconds: 60, type: 'exercise' });
+  saveData(); renderRows();
+  requestAnimationFrame(() => { $('editor-body').scrollTop = $('editor-body').scrollHeight; });
+});
+$('btn-start').addEventListener('click', () => {
+  const p = selected();
+  if (p && p.intervals.length) startTimer();
+});
+$('btn-playpause').addEventListener('click', togglePause);
+$('btn-reset').addEventListener('click', resetTimer);
+$('btn-skip').addEventListener('click', skipInterval);
+$('btn-done').addEventListener('click', resetTimer);
+
+// ════════════════════════════════════════════════════════
+//  Init
+// ════════════════════════════════════════════════════════
+initTheme();
+loadData();
+renderSidebar();
+if (presets.length) pickPreset(presets[0].id);
+else showView('empty');
+</script>
+</body>
+</html>
